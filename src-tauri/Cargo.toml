@@ -1,0 +1,20 @@
+[package]
+name = "orbit-pet"
+version = "0.1.0"
+description = "A lively cross-platform desktop robot pet"
+authors = ["MochaSoft"]
+edition = "2021"
+
+[lib]
+name = "orbit_pet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+keytap = { version = "0.4.0", default-features = false }
+mouce = { version = "0.3.0", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }

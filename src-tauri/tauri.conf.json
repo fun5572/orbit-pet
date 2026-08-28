@@ -1,0 +1,125 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Orbit Pet",
+  "version": "0.1.0",
+  "identifier": "com.mochasoft.orbitpet",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "pet",
+        "title": "Orbit Pet",
+        "width": 115,
+        "height": 115,
+        "minWidth": 82,
+        "minHeight": 82,
+        "maxWidth": 220,
+        "maxHeight": 220,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "closable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visibleOnAllWorkspaces": true,
+        "focus": false
+      },
+      {
+        "label": "effects",
+        "title": "Orbit Pet Effects",
+        "url": "index.html?view=effects",
+        "width": 260,
+        "height": 280,
+        "minWidth": 260,
+        "minHeight": 280,
+        "maxWidth": 260,
+        "maxHeight": 280,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "closable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visibleOnAllWorkspaces": true,
+        "focus": false
+      },
+      {
+        "label": "settings",
+        "title": "Orbit Pet Settings",
+        "url": "index.html?view=settings",
+        "width": 330,
+        "height": 584,
+        "minWidth": 330,
+        "minHeight": 584,
+        "maxWidth": 330,
+        "maxHeight": 584,
+        "center": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "closable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visibleOnAllWorkspaces": true,
+        "visible": false,
+        "focus": true
+      },
+      {
+        "label": "codex-tasks",
+        "title": "Orbit Pet Codex Tasks",
+        "url": "index.html?view=codex-tasks",
+        "width": 340,
+        "height": 420,
+        "minWidth": 340,
+        "minHeight": 420,
+        "maxWidth": 340,
+        "maxHeight": 420,
+        "center": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "closable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visibleOnAllWorkspaces": true,
+        "visible": false,
+        "focus": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "macOS": {
+      "signingIdentity": "-"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
