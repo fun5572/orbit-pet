@@ -25,6 +25,15 @@ const initialPose: AnimatedPose = {
 };
 
 const animatedKeys = Object.keys(initialPose) as AnimatedKey[];
+const SETTLE_EPSILON = 0.001;
+
+// Round to sub-pixel precision so near-identical frames produce identical
+// attribute strings and can be skipped.
+const round = (value: number): number => Math.round(value * 1000) / 1000;
+
+const setAttr = (element: Element, name: string, value: string): void => {
+  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+};
 
 export interface RobotView {
   readonly element: HTMLElement;
@@ -150,6 +159,17 @@ export const createRobotView = (): RobotView => {
     animatedKeys.map((key) => [key, { value: initialPose[key], velocity: 0 }]),
   ) as Record<AnimatedKey, SpringValue>;
   let tearRippleOffset = 0;
+  let lastExpression: GazePose["expression"] | null = null;
+  let lastBlinkClosure = Number.NaN;
+  let lastGroundedMotion = false;
+  let restingFrameDrawn = false;
+
+  const isResting = (target: GazePose): boolean =>
+    animatedKeys.every(
+      (key) =>
+        Math.abs(target[key] - springs[key].value) < SETTLE_EPSILON &&
+        Math.abs(springs[key].velocity) < SETTLE_EPSILON,
+    );
 
   const render = (
     target: GazePose,
@@ -174,6 +194,20 @@ export const createRobotView = (): RobotView => {
       );
     }
 
+    // Skip DOM writes once the pose has settled; every write makes WebKit
+    // repaint the SVG, which allocates transient memory per frame.
+    const unchanged =
+      target.expression !== "grabbed" &&
+      target.expression === lastExpression &&
+      blinkClosure === lastBlinkClosure &&
+      groundedMotion === lastGroundedMotion &&
+      isResting(target);
+    lastExpression = target.expression;
+    lastBlinkClosure = blinkClosure;
+    lastGroundedMotion = groundedMotion;
+    if (unchanged && restingFrameDrawn) return;
+    restingFrameDrawn = unchanged;
+
     if (target.expression === "grabbed") {
       tearRippleOffset = (tearRippleOffset + Math.min(deltaSeconds, 1 / 30) * 30) % 18;
       tearRipplePattern.setAttribute(
@@ -182,21 +216,22 @@ export const createRobotView = (): RobotView => {
       );
     }
 
-    const pose = Object.fromEntries(animatedKeys.map((key) => [key, springs[key].value])) as Record<
+    const pose = Object.fromEntries(animatedKeys.map((key) => [key, round(springs[key].value)])) as Record<
       AnimatedKey,
       number
     >;
-    const blinkScale = Math.max(0.055, 1 - blinkClosure * 0.945);
-    shell.dataset.expression = target.expression;
+    const blinkScale = round(Math.max(0.055, 1 - blinkClosure * 0.945));
+    if (shell.dataset.expression !== target.expression) shell.dataset.expression = target.expression;
 
     const bodyPivotY = target.expression === "grabbed" ? 43 : groundedMotion ? 166 : 100;
-    body.setAttribute(
+    setAttr(
+      body,
       "transform",
       `translate(100 ${bodyPivotY}) rotate(${pose.bodyTilt}) scale(${pose.bodyScaleX} ${pose.bodyScaleY}) translate(-100 ${-bodyPivotY})`,
     );
     const faceTransform = `translate(${pose.offsetX} ${pose.offsetY})`;
-    tears.setAttribute("transform", faceTransform);
-    eyes.setAttribute("transform", faceTransform);
+    setAttr(tears, "transform", faceTransform);
+    setAttr(eyes, "transform", faceTransform);
 
     const baseLeftCenter = 100 - pose.eyeGap / 2;
     const baseRightCenter = 100 + pose.eyeGap / 2;
@@ -211,11 +246,13 @@ export const createRobotView = (): RobotView => {
       const x = center - width / 2;
       const y = eyeCenterY - height / 2;
       const radius = Math.min(eyeRadius * sizeScale, width / 2, height / 2);
-      eye.setAttribute("x", String(x));
-      eye.setAttribute("y", String(y));
-      eye.setAttribute("width", String(width));
-      eye.setAttribute("height", String(height));
-      eye.setAttribute("rx", String(radius));
+      setAttr(eye, "x", String(round(x)));
+      setAttr(eye, "y", String(round(y)));
+      setAttr(eye, "width", String(round(width)));
+      setAttr(eye, "height", String(round(height)));
+      setAttr(eye, "rx", String(round(radius)));
+      // Cry eyes and tears are only visible while grabbed.
+      if (target.expression !== "grabbed") continue;
       const cryHalfWidth = width * 0.48;
       const cryBaseline = eyeCenterY + 3.5;
       const cryRise = Math.max(7.5, width * 0.24);
@@ -249,18 +286,21 @@ export const createRobotView = (): RobotView => {
       tearStream.setAttribute("d", tearPath);
       tearRipple.setAttribute("d", tearPath);
     }
-    leftEye.setAttribute(
+    setAttr(
+      leftEye,
       "transform",
       `translate(${baseLeftCenter} ${eyeCenterY}) rotate(${pose.eyeRotation - pose.asymmetry}) scale(${pose.eyeScaleX} ${pose.eyeScaleY * blinkScale}) translate(${-baseLeftCenter} ${-eyeCenterY})`,
     );
-    rightEye.setAttribute(
+    setAttr(
+      rightEye,
       "transform",
       `translate(${baseRightCenter} ${eyeCenterY}) rotate(${pose.eyeRotation + pose.asymmetry}) scale(${pose.eyeScaleX} ${pose.eyeScaleY * blinkScale}) translate(${-baseRightCenter} ${-eyeCenterY})`,
     );
 
-    spark.setAttribute("r", String(2.3 + pose.excitement * 3.5));
-    spark.setAttribute("opacity", String(0.12 + pose.excitement * 0.88));
-    shell.style.setProperty("--energy", pose.excitement.toFixed(3));
+    setAttr(spark, "r", String(round(2.3 + pose.excitement * 3.5)));
+    setAttr(spark, "opacity", String(round(0.12 + pose.excitement * 0.88)));
+    const energy = pose.excitement.toFixed(3);
+    if (shell.style.getPropertyValue("--energy") !== energy) shell.style.setProperty("--energy", energy);
   };
 
   return {

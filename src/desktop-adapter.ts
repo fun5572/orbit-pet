@@ -29,6 +29,9 @@ export interface DesktopAdapter {
 
 const isTauriRuntime = (): boolean => "__TAURI_INTERNALS__" in window;
 const POINTER_SAMPLE_INTERVAL_MS = 32;
+const POINTER_IDLE_SAMPLE_INTERVAL_MS = 128;
+// About one second of unchanged samples before slowing down.
+const POINTER_IDLE_AFTER_SAMPLES = 30;
 const POINTER_RETRY_INTERVAL_MS = 160;
 const POINTER_ERROR_LOG_INTERVAL_MS = 5_000;
 const clamp = (value: number, minimum: number, maximum: number): number =>
@@ -58,6 +61,10 @@ export const createDesktopAdapter = (): DesktopAdapter => {
   let queuedAutonomousOffset: Point | null = null;
   let autonomousMovePromise: Promise<void> | null = null;
   let lastPointerErrorLoggedAt = Number.NEGATIVE_INFINITY;
+  let cachedScale: number | null = null;
+  let stopScaleListener = (): void => undefined;
+  let lastCenter: Point | null = null;
+  let stillSamples = 0;
 
   const onBrowserPointer = (event: PointerEvent): void => {
     browserPointer = { x: event.clientX, y: event.clientY };
@@ -65,11 +72,9 @@ export const createDesktopAdapter = (): DesktopAdapter => {
 
   const sampleTauriFrame = async (): Promise<{ pointer: PhysicalPosition; center: Point; scale: number }> => {
     if (!tauriWindow) throw new Error("Tauri window is unavailable");
-    const [pointer, position, scale] = await Promise.all([
-      cursorPosition(),
-      tauriWindow.outerPosition(),
-      tauriWindow.scaleFactor(),
-    ]);
+    cachedScale ??= await tauriWindow.scaleFactor();
+    const scale = cachedScale;
+    const [pointer, position] = await Promise.all([cursorPosition(), tauriWindow.outerPosition()]);
     return {
       pointer,
       center: {
@@ -135,6 +140,7 @@ export const createDesktopAdapter = (): DesktopAdapter => {
   const setAutonomousOffset = async (offset: Point): Promise<void> => {
     if (!tauriWindow) return;
     queuedAutonomousOffset = offset;
+    stillSamples = 0;
     if (!autonomousMovePromise) {
       autonomousMovePromise = flushAutonomousMoves().finally(() => {
         autonomousMovePromise = null;
@@ -168,6 +174,13 @@ export const createDesktopAdapter = (): DesktopAdapter => {
         });
       } catch (error) {
         console.error("Failed to observe pet window movement", error);
+      }
+      try {
+        stopScaleListener = await tauriWindow.onScaleChanged(({ payload }) => {
+          cachedScale = payload.scaleFactor;
+        });
+      } catch (error) {
+        console.error("Failed to observe pet window scale changes", error);
       }
     }
 
@@ -209,7 +222,16 @@ export const createDesktopAdapter = (): DesktopAdapter => {
           isInsidePet: distanceFromCenter <= petSize * 0.39 * scale,
         });
 
+        const still =
+          lastPointer !== null &&
+          lastCenter !== null &&
+          pointer.x === lastPointer.x &&
+          pointer.y === lastPointer.y &&
+          center.x === lastCenter.x &&
+          center.y === lastCenter.y;
+        stillSamples = still ? stillSamples + 1 : 0;
         lastPointer = pointer;
+        lastCenter = center;
         lastSampleTime = now;
       } catch (error) {
         retryAfterFailure = true;
@@ -221,7 +243,11 @@ export const createDesktopAdapter = (): DesktopAdapter => {
         if (!destroyed) {
           timer = window.setTimeout(
             () => void tick(),
-            retryAfterFailure ? POINTER_RETRY_INTERVAL_MS : POINTER_SAMPLE_INTERVAL_MS,
+            retryAfterFailure
+              ? POINTER_RETRY_INTERVAL_MS
+              : stillSamples >= POINTER_IDLE_AFTER_SAMPLES
+                ? POINTER_IDLE_SAMPLE_INTERVAL_MS
+                : POINTER_SAMPLE_INTERVAL_MS,
           );
         }
       }
@@ -233,6 +259,7 @@ export const createDesktopAdapter = (): DesktopAdapter => {
   return {
     start,
     startDragging: async () => {
+      stillSamples = 0;
       if (tauriWindow) await tauriWindow.startDragging();
     },
     isPrimaryButtonPressed: async () => {
@@ -298,6 +325,7 @@ export const createDesktopAdapter = (): DesktopAdapter => {
       autonomousBounds = null;
       if (timer !== undefined) window.clearTimeout(timer);
       stopMoveListener();
+      stopScaleListener();
       window.removeEventListener("pointermove", onBrowserPointer);
     },
   };

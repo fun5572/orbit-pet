@@ -39,6 +39,8 @@ const isTauriRuntime = (): boolean => "__TAURI_INTERNALS__" in window;
 const GRAB_BUTTON_CHECK_DELAY_MS = 100;
 const CODEX_POLL_INTERVAL_MS = 650;
 const CODEX_CELEBRATION_MS = 950;
+// Slightly under 1/30s so a 60Hz display reliably paints every other frame.
+const RENDER_FRAME_MS = 1000 / 30 - 2;
 
 const mountPetView = (): void => {
   const robot = createRobotView();
@@ -275,6 +277,12 @@ const mountPetView = (): void => {
   });
 
   const render = (now: number): void => {
+    // Each painted frame costs WebKit tens of KB of transient memory, so cap
+    // the pet at 30fps instead of following the display refresh rate.
+    if (now - previousRenderTime < RENDER_FRAME_MS) {
+      requestAnimationFrame(render);
+      return;
+    }
     const deltaSeconds = Math.max((now - previousRenderTime) / 1000, 1 / 240);
     previousRenderTime = now;
     const canBlink = targetPose.expression !== "sleeping" && targetPose.expression !== "grabbed";
